@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>Streaming Audio Jernih (Optimized)</h1>
+    <button id="btn">Mulai Dengar</button>
+    <p id="info">Status: Siap</p>
+
+    <script>
+        const btn = document.getElementById('btn');
+        let audioCtx;
+        let nextStartTime = 0; // Waktu untuk menjadwalkan paket berikutnya
+
+        btn.onclick = () => {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const ws = new WebSocket('ws://' + window.location.hostname + ':8080');
+            ws.binaryType = 'arraybuffer';
+
+            ws.onmessage = (e) => {
+                const pcm = new Int16Array(e.data);
+                const f32 = new Float32Array(pcm.length);
+                for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32768;
+
+                const buf = audioCtx.createBuffer(1, f32.length, 16000);
+                buf.copyToChannel(f32, 0);
+                
+                const src = audioCtx.createBufferSource();
+                src.buffer = buf;
+                src.connect(audioCtx.destination);
+
+                // Logika Scheduling:
+                // Jika waktu sekarang sudah lewat dari jadwal, mulai dari sekarang
+                // Jika belum, sambungkan tepat di akhir suara sebelumnya
+                const currentTime = audioCtx.currentTime;
+                if (nextStartTime < currentTime) {
+                    nextStartTime = currentTime + 0.05; // Beri sedikit delay awal (buffer)
+                }
+
+                src.start(nextStartTime);
+                nextStartTime += buf.duration; // Tambahkan durasi untuk paket selanjutnya
+            };
+
+            btn.innerText = "Mendengarkan...";
+            btn.disabled = true;
+            document.getElementById('info').innerText = "Status: Streaming Berjalan";
+        };
+    </script>
+</body>
+</html>
